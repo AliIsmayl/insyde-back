@@ -1,0 +1,558 @@
+<!doctype html>
+<html lang="az">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Sistem 2026</title>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        background: #0f0f0f;
+        color: #e0e0e0;
+        font-family: 'Segoe UI', sans-serif;
+        padding: 20px;
+        margin: 0;
+      }
+      .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+      .box {
+        background: #1a1a1a;
+        padding: 20px;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        border: 1px solid #2a2a2a;
+      }
+      .hidden { display: none !important; }
+      input, select, textarea {
+        background: #222;
+        color: #fff;
+        border: 1px solid #383838;
+        padding: 10px 12px;
+        margin: 6px 0;
+        border-radius: 6px;
+        width: 100%;
+        font-family: inherit;
+        font-size: 14px;
+        transition: border 0.2s;
+      }
+      input:focus, select:focus, textarea:focus {
+        outline: none;
+        border-color: #d4af37;
+      }
+      button {
+        background: #d4af37;
+        color: #000;
+        border: none;
+        padding: 10px 18px;
+        cursor: pointer;
+        font-weight: bold;
+        border-radius: 6px;
+        margin: 4px 2px;
+        font-size: 13px;
+        transition: opacity 0.2s;
+      }
+      button:hover { opacity: 0.85; }
+      table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+      th { background: #222; color: #d4af37; text-align: left; padding: 12px; font-size: 13px; }
+      td { padding: 10px 12px; border-bottom: 1px solid #252525; font-size: 13px; vertical-align: middle; }
+      tr:hover td { background: #1e1e1e; }
+      .btn-red { background: #c0392b; color: #fff; padding: 5px 10px; font-size: 12px; }
+      .btn-green { background: #27ae60; color: #fff; padding: 5px 10px; font-size: 12px; }
+      .btn-blue { background: #2980b9; color: #fff; padding: 5px 10px; font-size: 12px; }
+      .btn-gray { background: #555; color: #fff; padding: 5px 10px; font-size: 12px; }
+      .btn-logout { background: #c0392b; color: #fff; }
+      .logout-container { text-align: right; margin-bottom: 15px; }
+      .preview-img {
+        width: 90px; height: 90px;
+        object-fit: cover; border-radius: 50%;
+        border: 3px solid #d4af37; display: block; margin: 8px 0;
+      }
+      h2 { color: #d4af37; margin-top: 0; }
+      h3 { color: #c9a227; margin-top: 0; border-bottom: 1px solid #2a2a2a; padding-bottom: 8px; }
+      h4 { color: #bbb; }
+      .tag {
+        display: inline-block; background: #2a2a2a;
+        border: 1px solid #444; padding: 3px 8px;
+        border-radius: 4px; font-size: 12px; margin: 2px;
+      }
+      .modal-bg {
+        display: none; position: fixed; inset: 0;
+        background: rgba(0,0,0,0.8); z-index: 100;
+        align-items: center; justify-content: center;
+      }
+      .modal-bg.active { display: flex; }
+      .modal {
+        background: #1a1a1a; border: 1px solid #333;
+        border-radius: 10px; padding: 25px;
+        width: 500px; max-width: 95vw; max-height: 90vh; overflow-y: auto;
+      }
+      .modal h3 { color: #d4af37; }
+      .social-item {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 8px 10px; background: #222; border-radius: 6px; margin: 5px 0;
+        border: 1px solid #2a2a2a;
+      }
+      .social-item span { display: flex; align-items: center; gap: 8px; }
+      #toast {
+        position: fixed; bottom: 20px; right: 20px;
+        background: #27ae60; color: #fff;
+        padding: 12px 20px; border-radius: 6px;
+        font-size: 14px; z-index: 999;
+        opacity: 0; transition: opacity 0.3s;
+        pointer-events: none;
+      }
+      #toast.err { background: #c0392b; }
+      #toast.show { opacity: 1; }
+    </style>
+  </head>
+  <body>
+    <div id="toast"></div>
+
+    <!-- LOGIN -->
+    <div id="loginPanel" class="box" style="max-width:400px; margin:80px auto">
+      <h2 style="text-align:center">🔐 Sistem 2026</h2>
+      <input id="uCode" placeholder="İstifadəçi kodu" />
+      <input id="uPass" type="password" placeholder="Şifrə" />
+      <button onclick="login()" style="width:100%; margin-top:8px">Daxil Ol</button>
+    </div>
+
+    <!-- SUPERADMIN PANELİ -->
+    <div id="adminPanel" class="hidden">
+      <div class="logout-container">
+        <span style="color:#888; font-size:13px">Superadmin olaraq girdiniz</span>
+        <button class="btn-logout" onclick="logout()">Çıxış</button>
+      </div>
+
+      <div class="grid">
+        <!-- Sosial Platformalar -->
+        <div class="box">
+          <h3>📱 Sosial Platformalar</h3>
+          <input id="pName" placeholder="Platform adı (məs: Instagram)" />
+          <label style="font-size:13px; color:#aaa">İkon:</label>
+          <select id="pIconSelect">
+            <option value="instagram">Instagram</option>
+            <option value="facebook">Facebook</option>
+            <option value="twitter">Twitter</option>
+            <option value="youtube">Youtube</option>
+            <option value="linkedin">Linkedin</option>
+            <option value="github">Github</option>
+            <option value="globe">Vebsayt</option>
+            <option value="mail">Email</option>
+            <option value="phone">Telefon</option>
+            <option value="music">Musik</option>
+            <option value="twitch">Twitch</option>
+          </select>
+          <button onclick="addSocial()">+ Platform Əlavə Et</button>
+          <div id="socialBaseList" style="margin-top:12px"></div>
+        </div>
+
+        <!-- İstifadəçi Yarat -->
+        <div class="box">
+          <h3>👤 Yeni İstifadəçi</h3>
+          <input id="nName" placeholder="Ad Soyad" />
+          <input id="nPass" placeholder="Şifrə" />
+          <button onclick="createUser()">+ İstifadəçi Yarat</button>
+        </div>
+      </div>
+
+      <!-- İstifadəçi cədvəli -->
+      <div class="box">
+        <h3>👥 İstifadəçi Bazası</h3>
+        <table>
+          <thead>
+            <tr>
+              <th>Kod</th>
+              <th>Ad</th>
+              <th>Email</th>
+              <th>Status</th>
+              <th>Əməliyyatlar</th>
+            </tr>
+          </thead>
+          <tbody id="userList"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- USER PANELİ -->
+    <div id="userPanel" class="hidden">
+      <div class="logout-container">
+        <button class="btn-logout" onclick="logout()">Çıxış</button>
+      </div>
+
+      <div class="box">
+        <h2>Xoş gəldin, <span id="myName" style="color:#fff"></span> 👋</h2>
+        <p style="color:#888; margin:0">Slug: <b style="color:#d4af37" id="mySlug"></b></p>
+      </div>
+
+      <div class="grid">
+        <!-- Profil Yeniləmə -->
+        <div class="box">
+          <h3>✏️ Profil Məlumatları</h3>
+          <img id="imgPreview" class="preview-img" src="https://via.placeholder.com/90" />
+          <label style="font-size:13px; color:#aaa">Profil şəkli:</label>
+          <input type="file" id="profImageFile" accept="image/*" />
+          <input id="profName" placeholder="Ad Soyad" />
+          <input id="profEmail" placeholder="Email" />
+          <textarea id="profAbout" placeholder="Haqqımda..." rows="4"></textarea>
+          <button onclick="updateProfile()">💾 Yadda Saxla</button>
+        </div>
+
+        <!-- Sosial Linklər -->
+        <div class="box">
+          <h3>🔗 Sosial Linklər</h3>
+          <select id="socialSelect"></select>
+          <input id="socialLink" placeholder="Link (məs: instagram.com/username)" />
+          <button onclick="saveUserSocial()">+ Link Əlavə Et</button>
+          <hr style="border-color:#2a2a2a; margin:15px 0" />
+          <h4 style="margin:0 0 10px">Mövcud linklər:</h4>
+          <div id="mySocialList"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ADMİN: USER EDİT MODAL -->
+    <div id="editModal" class="modal-bg">
+      <div class="modal">
+        <h3>✏️ İstifadəçini Redaktə Et</h3>
+        <input type="hidden" id="editCode" />
+        <label style="font-size:13px;color:#aaa">Ad Soyad</label>
+        <input id="editName" placeholder="Ad Soyad" />
+        <label style="font-size:13px;color:#aaa">Email</label>
+        <input id="editEmail" placeholder="Email" />
+        <label style="font-size:13px;color:#aaa">Haqqında</label>
+        <textarea id="editAbout" rows="3" placeholder="Haqqında..."></textarea>
+        <label style="font-size:13px;color:#aaa">Yeni şifrə (boş qoysan dəyişmir)</label>
+        <input id="editPass" type="password" placeholder="Yeni şifrə" />
+        <label style="font-size:13px;color:#aaa">Profil şəkli:</label>
+        <input type="hidden" id="editImgCurrent" />
+        <input type="file" id="editImageFile" accept="image/*" />
+        <hr style="border-color:#2a2a2a; margin:10px 0" />
+        <h4 style="margin:8px 0">Sosial Linkləri:</h4>
+        <div id="adminUserSocialList"></div>
+        <hr style="border-color:#2a2a2a; margin:10px 0" />
+        <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:10px">
+          <button class="btn-gray" onclick="closeModal()">Ləğv Et</button>
+          <button onclick="saveEditUser()">💾 Yadda Saxla</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API = "http://localhost:3000/api";
+      const BASE = "http://localhost:3000";
+      let token = localStorage.getItem("token");
+      let role = localStorage.getItem("role");
+
+      // ── Toast ──
+      function toast(msg, isErr = false) {
+        const t = document.getElementById("toast");
+        t.textContent = msg;
+        t.className = "show" + (isErr ? " err" : "");
+        setTimeout(() => t.className = "", 2800);
+      }
+
+      // ── Auth ──
+      function logout() { localStorage.clear(); location.reload(); }
+
+      async function login() {
+        const res = await fetch(`${API}/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userCode: uCode.value.trim(), pass: uPass.value }),
+        });
+        const data = await res.json();
+        if (data.token) {
+          localStorage.setItem("token", data.token);
+          localStorage.setItem("role", data.role);
+          location.reload();
+        } else {
+          toast(data.error || "Xəta baş verdi", true);
+        }
+      }
+
+      // Enter ilə login
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !loginPanel.classList.contains("hidden")) login();
+      });
+
+      // ── Image preview ──
+      document.addEventListener("change", (e) => {
+        if (e.target.id === "profImageFile") {
+          const [f] = e.target.files;
+          if (f) imgPreview.src = URL.createObjectURL(f);
+        }
+      });
+
+      // ════ SUPERADMİN ════
+
+      async function loadAdmin() {
+        // İstifadəçilər
+        const res = await fetch(`${API}/admin/users`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const users = await res.json();
+        userList.innerHTML = users.map(u => `
+          <tr>
+            <td><span class="tag">${u.userCode}</span></td>
+            <td>${u.name || "-"}</td>
+            <td>${u.email || "-"}</td>
+            <td>
+              <span style="color:${u.blocked ? '#e74c3c' : '#2ecc71'}">
+                ${u.blocked ? "🔴 Blok" : "🟢 Aktiv"}
+              </span>
+            </td>
+            <td style="white-space:nowrap">
+              <button class="btn-blue" onclick="openEditUser('${u.userCode}')">Redaktə</button>
+              <button class="${u.blocked ? 'btn-green' : 'btn-red'}"
+                onclick="toggleBlock('${u.userCode}', ${u.blocked})">
+                ${u.blocked ? "Açıq" : "Blokla"}
+              </button>
+              <button class="btn-red" onclick="deleteU('${u.userCode}')">Sil</button>
+            </td>
+          </tr>
+        `).join("");
+
+        // Sosial platformalar
+        const resSoc = await fetch(`${API}/socials`);
+        const socs = await resSoc.json();
+        socialBaseList.innerHTML = socs.map(s => `
+          <div class="social-item">
+            <span>
+              <i data-lucide="${s.icon}" style="width:16px;height:16px"></i>
+              <b>${s.name}</b>
+            </span>
+            <button class="btn-red" onclick="deleteSoc(${s.id})">Sil</button>
+          </div>
+        `).join("");
+        lucide.createIcons();
+      }
+
+      async function addSocial() {
+        const name = pName.value.trim();
+        const icon = pIconSelect.value;
+        if (!name) return toast("Ad daxil edin", true);
+        const res = await fetch(`${API}/admin/social`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ name, icon }),
+        });
+        const d = await res.json();
+        if (!res.ok) return toast(d.error, true);
+        pName.value = "";
+        toast("Platform əlavə edildi");
+        loadAdmin();
+      }
+
+      async function deleteSoc(id) {
+        if (!confirm("Bu platformanı silmək istəyirsiniz?")) return;
+        await fetch(`${API}/admin/social/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        toast("Platform silindi");
+        loadAdmin();
+      }
+
+      async function createUser() {
+        const name = nName.value.trim();
+        const pass = nPass.value.trim();
+        if (!name || !pass) return toast("Ad və şifrə daxil edin", true);
+        const res = await fetch(`${API}/admin/users`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ name, pass }),
+        });
+        const d = await res.json();
+        if (!res.ok) return toast(d.error, true);
+        toast(`İstifadəçi yaradıldı: ${d.userCode}`);
+        nName.value = ""; nPass.value = "";
+        loadAdmin();
+      }
+
+      async function deleteU(code) {
+        if (!confirm(`${code} silinsin?`)) return;
+        await fetch(`${API}/admin/users/${code}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        toast("İstifadəçi silindi");
+        loadAdmin();
+      }
+
+      async function toggleBlock(code, isBlocked) {
+        await fetch(`${API}/admin/users/block`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ userCode: code, blocked: !isBlocked }),
+        });
+        toast(isBlocked ? "Blok götürüldü" : "İstifadəçi bloklandı");
+        loadAdmin();
+      }
+
+      // Edit modal
+      async function openEditUser(code) {
+        const res = await fetch(`${API}/admin/users`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const users = await res.json();
+        const u = users.find(x => x.userCode === code);
+        if (!u) return;
+
+        editCode.value = u.userCode;
+        editName.value = u.name || "";
+        editEmail.value = u.email || "";
+        editAbout.value = u.about || "";
+        editPass.value = "";
+        editImgCurrent.value = u.image || "";
+
+        // Social linklər
+        const resSoc = await fetch(`${API}/admin/users/${code}/social`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const socs = await resSoc.json();
+        adminUserSocialList.innerHTML = socs.length
+          ? socs.map(s => `
+              <div class="social-item">
+                <span><b>${s.category}:</b> ${s.link}</span>
+              </div>
+            `).join("")
+          : "<p style='color:#666; font-size:13px'>Heç bir link yoxdur</p>";
+
+        editModal.classList.add("active");
+        lucide.createIcons();
+      }
+
+      function closeModal() {
+        editModal.classList.remove("active");
+      }
+
+      async function saveEditUser() {
+        const code = editCode.value;
+        const formData = new FormData();
+        formData.append("name", editName.value);
+        formData.append("email", editEmail.value);
+        formData.append("about", editAbout.value);
+        formData.append("image", editImgCurrent.value);
+        if (editPass.value) formData.append("pass", editPass.value);
+        if (editImageFile.files[0]) formData.append("image", editImageFile.files[0]);
+
+        const res = await fetch(`${API}/admin/users/${code}`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        if (res.ok) {
+          toast("Məlumatlar yeniləndi");
+          closeModal();
+          loadAdmin();
+        } else {
+          toast("Xəta baş verdi", true);
+        }
+      }
+
+      // ════ USER ════
+
+      async function loadUserPanel() {
+        const res = await fetch(`${API}/user/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return logout();
+        const d = await res.json();
+
+        myName.textContent = d.name || "";
+        mySlug.textContent = d.slug || "";
+        profName.value = d.name || "";
+        profEmail.value = d.email || "";
+        profAbout.value = d.about || "";
+        imgPreview.src = d.image ? BASE + d.image : "https://via.placeholder.com/90";
+
+        // Sosial platformalar dropdown
+        const resSoc = await fetch(`${API}/socials`);
+        const socs = await resSoc.json();
+        socialSelect.innerHTML = socs.length
+          ? socs.map(s => `<option value="${s.name}">${s.name}</option>`).join("")
+          : "<option value=''>Platform yoxdur</option>";
+
+        // Mövcud sosial linklər
+        const resMy = await fetch(`${API}/user/social-info`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const myLinks = await resMy.json();
+        mySocialList.innerHTML = myLinks.length
+          ? myLinks.map(m => `
+              <div class="social-item">
+                <span>
+                  <i data-lucide="${m.icon || 'link'}" style="width:14px;height:14px"></i>
+                  <b>${m.category}:</b> ${m.link}
+                </span>
+                <button class="btn-red" onclick="deleteSocialLink(${m.id})">Sil</button>
+              </div>
+            `).join("")
+          : "<p style='color:#666; font-size:13px'>Hələ ki link yoxdur</p>";
+        lucide.createIcons();
+      }
+
+      async function updateProfile() {
+        const formData = new FormData();
+        formData.append("name", profName.value);
+        formData.append("email", profEmail.value);
+        formData.append("about", profAbout.value);
+        // Köhnə şəkil yolunu göndər (yeni yüklənməyibsə)
+        const currentSrc = imgPreview.src;
+        if (!profImageFile.files[0] && currentSrc.includes("/uploads/")) {
+          formData.append("image", currentSrc.replace(BASE, ""));
+        }
+        if (profImageFile.files[0]) formData.append("image", profImageFile.files[0]);
+
+        const res = await fetch(`${API}/user/me`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        });
+        if (res.ok) {
+          toast("Profil yeniləndi!");
+          profImageFile.value = "";
+          loadUserPanel();
+        } else {
+          toast("Xəta baş verdi", true);
+        }
+      }
+
+      async function saveUserSocial() {
+        const category = socialSelect.value;
+        const link = socialLink.value.trim();
+        if (!category || !link) return toast("Kateqoriya və link daxil edin", true);
+        const res = await fetch(`${API}/user/social-info`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ category, link }),
+        });
+        if (res.ok) {
+          toast("Link əlavə edildi");
+          socialLink.value = "";
+          loadUserPanel();
+        }
+      }
+
+      async function deleteSocialLink(id) {
+        await fetch(`${API}/user/social-info/${id}`, {
+          method: "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        toast("Link silindi");
+        loadUserPanel();
+      }
+
+      // ── İlk yükləmə ──
+      if (token) {
+        loginPanel.classList.add("hidden");
+        if (role === "superadmin") {
+          adminPanel.classList.remove("hidden");
+          loadAdmin();
+        } else {
+          userPanel.classList.remove("hidden");
+          loadUserPanel();
+        }
+      }
+    </script>
+  </body>
+</html>
