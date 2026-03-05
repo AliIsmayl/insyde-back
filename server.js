@@ -1,4 +1,4 @@
-// server.js (BACKEND - TAM)
+// server.js (BACKEND - TAM VƏ ARXİV SİSTEMİ İLƏ)
 // npm i express cors jsonwebtoken sqlite3 multer
 const express = require("express");
 const cors = require("cors");
@@ -54,7 +54,6 @@ db.serialize(() => {
       FOREIGN KEY(userCode) REFERENCES login(userCode) ON DELETE CASCADE
     )`,
     () => {
-      // Sütunları sonradan əlavə etmək lazım olarsa (Error atsa belə görməzdən gələcək)
       db.run("ALTER TABLE personalInfo ADD COLUMN profession TEXT", () => {});
       db.run("ALTER TABLE personalInfo ADD COLUMN skills TEXT", () => {});
       db.run(
@@ -79,18 +78,37 @@ db.serialize(() => {
     FOREIGN KEY(userCode) REFERENCES login(userCode) ON DELETE CASCADE
   )`);
 
-  // Şikayət / Təklif / Əlaqə mesajları
+  // ŞİKAYƏTLƏR
   db.run(`CREATE TABLE IF NOT EXISTS complaints (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     userCode TEXT NOT NULL,
-    type     TEXT NOT NULL DEFAULT 'complaint',   -- complaint | suggestion
+    type     TEXT NOT NULL DEFAULT 'complaint', 
     subject  TEXT,
     message  TEXT NOT NULL,
     reply    TEXT,
-    status   TEXT NOT NULL DEFAULT 'pending',     -- pending | answered
-    date     TEXT DEFAULT CURRENT_TIMESTAMP,
+    status   TEXT NOT NULL DEFAULT 'pending', 
+    date     TEXT,
     FOREIGN KEY(userCode) REFERENCES login(userCode) ON DELETE CASCADE
   )`);
+
+  // ARXİV İSTİFADƏÇİLƏR CƏDVƏLİ (ALTER TABLE İLƏ YENİLƏNİB)
+  db.run(
+    `CREATE TABLE IF NOT EXISTS archivedUsers (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    userCode    TEXT,
+    pass        TEXT,
+    name        TEXT,
+    slug        TEXT,
+    deletedAt   TEXT
+  )`,
+    () => {
+      // Sütunlar əvvəlki bazada yoxdursa məcburu yaradır (Xəta versə görməzdən gələcək)
+      db.run("ALTER TABLE archivedUsers ADD COLUMN pass TEXT", () => {});
+      db.run("ALTER TABLE archivedUsers ADD COLUMN name TEXT", () => {});
+      db.run("ALTER TABLE archivedUsers ADD COLUMN slug TEXT", () => {});
+      db.run("ALTER TABLE archivedUsers ADD COLUMN deletedAt TEXT", () => {});
+    },
+  );
 
   // Default superadmin yaradılması
   db.get("SELECT * FROM login WHERE role='superadmin'", (err, row) => {
@@ -113,7 +131,7 @@ const auth = (req, res, next) => {
 
   jwt.verify(token, SECRET, (err, decoded) => {
     if (err) return res.status(401).json({ error: "Token etibarsızdır" });
-    req.user = decoded; // { userCode, role }
+    req.user = decoded;
     next();
   });
 };
@@ -127,12 +145,8 @@ const superadminOnly = (req, res, next) => {
 // ───── LOGIN ─────
 app.post("/api/login", (req, res) => {
   const { userCode, pass } = req.body;
-
   db.get(
-    `SELECT l.*, p.slug
-     FROM login l
-     LEFT JOIN personalInfo p ON l.userCode = p.userCode
-     WHERE l.userCode = ? AND l.pass = ?`,
+    `SELECT l.*, p.slug FROM login l LEFT JOIN personalInfo p ON l.userCode = p.userCode WHERE l.userCode = ? AND l.pass = ?`,
     [userCode, pass],
     (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
@@ -144,7 +158,6 @@ app.post("/api/login", (req, res) => {
         { userCode: row.userCode, role: row.role },
         SECRET,
       );
-
       res.json({
         token,
         role: row.role,
@@ -166,10 +179,7 @@ app.get("/api/socials", (req, res) => {
 // ───── USER: PROFILE ─────
 app.get("/api/user/me", auth, (req, res) => {
   db.get(
-    `SELECT p.*, l.blocked
-     FROM personalInfo p
-     LEFT JOIN login l ON p.userCode = l.userCode
-     WHERE p.userCode=?`,
+    `SELECT p.*, l.blocked FROM personalInfo p LEFT JOIN login l ON p.userCode = l.userCode WHERE p.userCode=?`,
     [req.user.userCode],
     (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
@@ -187,11 +197,9 @@ app.get("/api/user/me", auth, (req, res) => {
   );
 });
 
-// Şəkil yüklənəndə və profili yeniləyəndə
 app.put("/api/user/me", auth, upload.single("image"), (req, res) => {
   const { email, about, profession, themeColor } = req.body;
   let { skills } = req.body;
-
   const skillsString = skills
     ? typeof skills === "string"
       ? skills
@@ -201,9 +209,7 @@ app.put("/api/user/me", auth, upload.single("image"), (req, res) => {
   if (req.file) {
     const imagePath = `/uploads/${req.file.filename}`;
     db.run(
-      `UPDATE personalInfo
-       SET email=?, about=?, profession=?, skills=?, themeColor=?, image=?
-       WHERE userCode=?`,
+      `UPDATE personalInfo SET email=?, about=?, profession=?, skills=?, themeColor=?, image=? WHERE userCode=?`,
       [
         email,
         about,
@@ -220,9 +226,7 @@ app.put("/api/user/me", auth, upload.single("image"), (req, res) => {
     );
   } else {
     db.run(
-      `UPDATE personalInfo
-       SET email=?, about=?, profession=?, skills=?, themeColor=?
-       WHERE userCode=?`,
+      `UPDATE personalInfo SET email=?, about=?, profession=?, skills=?, themeColor=? WHERE userCode=?`,
       [email, about, profession, skillsString, themeColor, req.user.userCode],
       (err) => {
         if (err) return res.status(500).json({ error: err.message });
@@ -235,10 +239,7 @@ app.put("/api/user/me", auth, upload.single("image"), (req, res) => {
 // ───── USER: SOCIAL LINKS ─────
 app.get("/api/user/social-info", auth, (req, res) => {
   db.all(
-    `SELECT si.id, si.category, si.link, si.clicks AS clickCount, s.icon
-     FROM sosialInfo si
-     LEFT JOIN sosial s ON si.category = s.name
-     WHERE si.userCode=?`,
+    `SELECT si.id, si.category, si.link, si.clicks AS clickCount, s.icon FROM sosialInfo si LEFT JOIN sosial s ON si.category = s.name WHERE si.userCode=?`,
     [req.user.userCode],
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
@@ -273,16 +274,11 @@ app.put("/api/user/social-info", auth, (req, res) => {
           const stmt = db.prepare(
             "INSERT INTO sosialInfo (userCode, category, link, clicks) VALUES (?, ?, ?, ?)",
           );
-
           links.forEach((linkObj) => {
-            let currentClicks = 0;
-            if (
-              !String(linkObj.id).startsWith("temp-") &&
-              clicksMap[linkObj.id]
-            ) {
-              currentClicks = clicksMap[linkObj.id];
-            }
-
+            let currentClicks =
+              !String(linkObj.id).startsWith("temp-") && clicksMap[linkObj.id]
+                ? clicksMap[linkObj.id]
+                : 0;
             stmt.run(
               req.user.userCode,
               linkObj.category || linkObj.platform,
@@ -312,23 +308,26 @@ app.post("/api/social-click/:id", (req, res) => {
   );
 });
 
-// ─────────────────────────────────────────────
-//  ŞİKAYƏT / TƏKLİF (AdminPanel burdan göndərəcək)
-// ─────────────────────────────────────────────
+// ───── ŞİKAYƏT / TƏKLİF ─────
 app.post("/api/complaints", auth, (req, res) => {
   const { type, subject, message } = req.body;
-
   if (!message || !message.trim())
     return res.status(400).json({ error: "Mesaj boş ola bilməz" });
 
   const finalType = ["complaint", "suggestion"].includes(type)
     ? type
     : "complaint";
+  const now = new Date().toISOString();
 
   db.run(
-    `INSERT INTO complaints (userCode, type, subject, message, status, date)
-     VALUES (?, ?, ?, ?, 'pending', datetime('now'))`,
-    [req.user.userCode, finalType, subject?.trim() || null, message.trim()],
+    `INSERT INTO complaints (userCode, type, subject, message, status, date) VALUES (?, ?, ?, ?, 'pending', ?)`,
+    [
+      req.user.userCode,
+      finalType,
+      subject?.trim() || null,
+      message.trim(),
+      now,
+    ],
     function (err) {
       if (err) return res.status(500).json({ error: err.message });
       res.json({ ok: true, id: this.lastID });
@@ -336,13 +335,9 @@ app.post("/api/complaints", auth, (req, res) => {
   );
 });
 
-// User öz müraciətlərini görə bilər (istəsən sonradan AdminPanel-də göstərərik)
 app.get("/api/user/complaints", auth, (req, res) => {
   db.all(
-    `SELECT id, type, subject, message, reply, status, date
-     FROM complaints
-     WHERE userCode=?
-     ORDER BY date DESC`,
+    `SELECT id, type, subject, message, reply, status, date FROM complaints WHERE userCode=? ORDER BY date DESC`,
     [req.user.userCode],
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
@@ -351,14 +346,9 @@ app.get("/api/user/complaints", auth, (req, res) => {
   );
 });
 
-// Superadmin bütün müraciətlər
 app.get("/api/admin/complaints", auth, superadminOnly, (req, res) => {
   db.all(
-    `SELECT c.id, c.userCode, c.type, c.subject, c.message, c.reply, c.status, c.date,
-            p.name AS fullName
-     FROM complaints c
-     LEFT JOIN personalInfo p ON c.userCode = p.userCode
-     ORDER BY c.date DESC`,
+    `SELECT c.id, c.userCode, c.type, c.subject, c.message, c.reply, c.status, c.date, p.name AS fullName FROM complaints c LEFT JOIN personalInfo p ON c.userCode = p.userCode ORDER BY c.date DESC`,
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       res.json(rows || []);
@@ -382,9 +372,10 @@ app.post(
         if (err) return res.status(500).json({ error: err.message });
         if (!row) return res.status(404).json({ error: "Mesaj tapılmadı" });
 
+        const answerDate = new Date().toISOString();
         db.run(
-          "UPDATE complaints SET reply=?, status='answered' WHERE id=?",
-          [reply.trim(), req.params.id],
+          "UPDATE complaints SET reply=?, status='answered', date=? WHERE id=?",
+          [reply.trim(), answerDate, req.params.id],
           (err) => {
             if (err) return res.status(500).json({ error: err.message });
             res.json({ ok: true });
@@ -395,16 +386,11 @@ app.post(
   },
 );
 
-// ───── SUPERADMIN: USERS + SOCIALS (SuperAdmin üçün) ─────
+// ───── SUPERADMIN: USERS ─────
 app.get("/api/admin/users", auth, superadminOnly, (req, res) => {
   db.all(
-    `SELECT l.userCode, l.pass, l.blocked,
-            p.name, p.email, p.slug, p.about, p.image,
-            p.profession, p.skills, p.themeColor, p.createdAt
-     FROM login l
-     LEFT JOIN personalInfo p ON l.userCode = p.userCode
-     WHERE l.role='user'
-     ORDER BY p.createdAt DESC`,
+    `SELECT l.userCode, l.pass, l.blocked, p.name, p.email, p.slug, p.about, p.image, p.profession, p.skills, p.themeColor, p.createdAt
+     FROM login l LEFT JOIN personalInfo p ON l.userCode = p.userCode WHERE l.role='user' ORDER BY p.createdAt DESC`,
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       const formatted = (rows || []).map((r) => {
@@ -420,13 +406,10 @@ app.get("/api/admin/users", auth, superadminOnly, (req, res) => {
   );
 });
 
-// Yeni İstifadəçi yaradılması (həm login həm personalInfo cədvəlinə əlavə olunur)
 app.post("/api/admin/users", auth, superadminOnly, (req, res) => {
   const { userCode, name, pass } = req.body;
-
   if (!userCode || !name || !pass)
     return res.status(400).json({ error: "Bütün xanaları doldurun" });
-
   const slug = String(userCode).toLowerCase();
 
   db.get(
@@ -445,8 +428,7 @@ app.post("/api/admin/users", auth, superadminOnly, (req, res) => {
         (err) => {
           if (err) return res.status(500).json({ error: err.message });
           db.run(
-            `INSERT INTO personalInfo (userCode, name, slug, profession, skills, themeColor)
-             VALUES (?, ?, ?, '', '["","",""]', '#c8a75e')`,
+            `INSERT INTO personalInfo (userCode, name, slug, profession, skills, themeColor) VALUES (?, ?, ?, '', '["","",""]', '#c8a75e')`,
             [userCode, name, slug],
             (err2) => {
               if (err2) return res.status(500).json({ error: err2.message });
@@ -459,35 +441,26 @@ app.post("/api/admin/users", auth, superadminOnly, (req, res) => {
   );
 });
 
-// User məlumatlarının Superadmin tərəfindən yenilənməsi
 app.put("/api/admin/users/:code", auth, superadminOnly, (req, res) => {
   const oldCode = req.params.code;
   const { userCode, name, pass } = req.body;
 
-  // 1. userCode dəyişibsə, yeni kodun mövcud olub-olmadığını yoxlayırıq
   db.get(
     "SELECT userCode FROM login WHERE userCode=?",
     [userCode],
     (err, row) => {
       if (err) return res.status(500).json({ error: err.message });
-      if (row && row.userCode !== oldCode) {
+      if (row && row.userCode !== oldCode)
         return res
           .status(409)
           .json({ error: "Bu istifadəçi kodu artıq mövcuddur!" });
-      }
 
-      // 2. Parolu yeniləyirik
       const slug = String(userCode).toLowerCase();
-
-      // CASCADE ON DELETE / UPDATE olmadığı üçün hər iki cədvəli güncəlləməliyik
-      // SQLite üçün PRAGMA foreign_keys = ON varsa, UPDATE CASCADE işləyə bilər,
-      // amma işini qarantiya almaq üçün ardıcıl yazaq.
       db.run(
         "UPDATE login SET userCode=?, pass=? WHERE userCode=?",
         [userCode, pass, oldCode],
         (err2) => {
           if (err2) return res.status(500).json({ error: err2.message });
-
           db.run(
             "UPDATE personalInfo SET userCode=?, name=?, slug=? WHERE userCode=?",
             [userCode, name, slug, oldCode],
@@ -502,15 +475,6 @@ app.put("/api/admin/users/:code", auth, superadminOnly, (req, res) => {
   );
 });
 
-// User silinməsi
-app.delete("/api/admin/users/:code", auth, superadminOnly, (req, res) => {
-  db.run("DELETE FROM login WHERE userCode=?", [req.params.code], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.json({ ok: true });
-  });
-});
-
-// Bloklama və Blokdan çıxarma
 app.patch("/api/admin/users/block", auth, superadminOnly, (req, res) => {
   const { userCode, blocked } = req.body;
   db.run(
@@ -523,7 +487,6 @@ app.patch("/api/admin/users/block", auth, superadminOnly, (req, res) => {
   );
 });
 
-// Admin panelində userlərin sosial linklərini görmək
 app.get("/api/admin/users/:code/social", auth, superadminOnly, (req, res) => {
   db.all(
     "SELECT * FROM sosialInfo WHERE userCode=?",
@@ -535,7 +498,6 @@ app.get("/api/admin/users/:code/social", auth, superadminOnly, (req, res) => {
   );
 });
 
-// Platform əlavə etmək
 app.post("/api/admin/social", auth, superadminOnly, (req, res) => {
   const { name, icon } = req.body;
   db.run(
@@ -549,13 +511,128 @@ app.post("/api/admin/social", auth, superadminOnly, (req, res) => {
   );
 });
 
-// Platform silmək
 app.delete("/api/admin/social/:id", auth, superadminOnly, (req, res) => {
   db.run("DELETE FROM sosial WHERE id=?", [req.params.id], (err) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json({ ok: true });
   });
 });
+
+// ============================================
+// ARXİV SİSTEMİ: İSTİFADƏÇİ SİLİNMƏSİ VƏ BƏRPASI
+// ============================================
+
+// 1. İstifadəçini Arxivə Göndərmək
+app.delete("/api/admin/users/:code", auth, superadminOnly, (req, res) => {
+  const userCode = req.params.code;
+
+  db.get(
+    `SELECT l.userCode, l.pass, p.name, p.slug FROM login l LEFT JOIN personalInfo p ON l.userCode = p.userCode WHERE l.userCode=?`,
+    [userCode],
+    (err, row) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!row) return res.status(404).json({ error: "İstifadəçi tapılmadı" });
+
+      const deletedAt = new Date().toISOString();
+
+      db.run(
+        `INSERT INTO archivedUsers (userCode, pass, name, slug, deletedAt) VALUES (?, ?, ?, ?, ?)`,
+        [
+          row.userCode,
+          row.pass,
+          row.name || "Bilinmir",
+          row.slug || "",
+          deletedAt,
+        ],
+        (err2) => {
+          if (err2) {
+            console.error("Arxiv yazılma xətası:", err2.message);
+            return res.status(500).json({ error: err2.message });
+          }
+
+          db.run("DELETE FROM login WHERE userCode=?", [userCode], (err3) => {
+            if (err3) return res.status(500).json({ error: err3.message });
+            res.json({ ok: true, message: "İstifadəçi arxivə göndərildi." });
+          });
+        },
+      );
+    },
+  );
+});
+
+// 2. Arxivlənmiş İstifadəçiləri Gətirmək
+app.get("/api/admin/archives/users", auth, superadminOnly, (req, res) => {
+  db.all("SELECT * FROM archivedUsers ORDER BY deletedAt DESC", (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(rows || []);
+  });
+});
+
+// 3. Arxivdən İstifadəçini Bərpa Etmək
+app.post(
+  "/api/admin/archives/users/restore/:id",
+  auth,
+  superadminOnly,
+  (req, res) => {
+    const archiveId = req.params.id;
+
+    db.get(
+      "SELECT * FROM archivedUsers WHERE id=?",
+      [archiveId],
+      (err, row) => {
+        if (err) return res.status(500).json({ error: err.message });
+        if (!row)
+          return res
+            .status(404)
+            .json({ error: "Arxivdə bu istifadəçi tapılmadı" });
+
+        db.run(
+          "INSERT INTO login (userCode, pass, role) VALUES (?, ?, 'user')",
+          [row.userCode, row.pass],
+          (err2) => {
+            if (err2)
+              return res
+                .status(500)
+                .json({
+                  error: "Bərpa zamanı xəta. Bu kod artıq mövcud ola bilər.",
+                });
+
+            db.run(
+              `INSERT INTO personalInfo (userCode, name, slug, profession, skills, themeColor) VALUES (?, ?, ?, '', '["","",""]', '#c8a75e')`,
+              [row.userCode, row.name, row.slug],
+              (err3) => {
+                if (err3) return res.status(500).json({ error: err3.message });
+
+                db.run(
+                  "DELETE FROM archivedUsers WHERE id=?",
+                  [archiveId],
+                  (err4) => {
+                    if (err4)
+                      return res.status(500).json({ error: err4.message });
+                    res.json({ ok: true, message: "İstifadəçi bərpa edildi." });
+                  },
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  },
+);
+
+// 4. Arxivdən İstifadəçini Tamamilə Silmək
+app.delete(
+  "/api/admin/archives/users/:id",
+  auth,
+  superadminOnly,
+  (req, res) => {
+    db.run("DELETE FROM archivedUsers WHERE id=?", [req.params.id], (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.json({ ok: true, message: "İstifadəçi tamamilə silindi." });
+    });
+  },
+);
 
 // ───── START SERVER ─────
 app.listen(3000, () =>
