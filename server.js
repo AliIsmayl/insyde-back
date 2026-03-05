@@ -1,4 +1,4 @@
-// server.js (BACKEND - TAM VƏ ARXİV SİSTEMİ İLƏ)
+// server.js (BACKEND - TAM VƏ ARXİV, TƏSDİQ, RƏDD SƏBƏBİ SİSTEMİ İLƏ + OLD/NEW FƏRQ MƏNTİQİ)
 // npm i express cors jsonwebtoken sqlite3 multer
 const express = require("express");
 const cors = require("cors");
@@ -63,6 +63,24 @@ db.serialize(() => {
     },
   );
 
+  db.run(
+    `CREATE TABLE IF NOT EXISTS profileUpdates (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    userCode      TEXT,
+    changes       TEXT,
+    status        TEXT DEFAULT 'pending',
+    rejectReason  TEXT,
+    createdAt     TEXT DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(userCode) REFERENCES login(userCode) ON DELETE CASCADE
+  )`,
+    () => {
+      db.run(
+        "ALTER TABLE profileUpdates ADD COLUMN rejectReason TEXT",
+        () => {},
+      );
+    },
+  );
+
   db.run(`CREATE TABLE IF NOT EXISTS sosial (
     id   INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT UNIQUE,
@@ -78,7 +96,6 @@ db.serialize(() => {
     FOREIGN KEY(userCode) REFERENCES login(userCode) ON DELETE CASCADE
   )`);
 
-  // ŞİKAYƏTLƏR
   db.run(`CREATE TABLE IF NOT EXISTS complaints (
     id       INTEGER PRIMARY KEY AUTOINCREMENT,
     userCode TEXT NOT NULL,
@@ -91,7 +108,6 @@ db.serialize(() => {
     FOREIGN KEY(userCode) REFERENCES login(userCode) ON DELETE CASCADE
   )`);
 
-  // ARXİV İSTİFADƏÇİLƏR CƏDVƏLİ (ALTER TABLE İLƏ YENİLƏNİB)
   db.run(
     `CREATE TABLE IF NOT EXISTS archivedUsers (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,7 +118,6 @@ db.serialize(() => {
     deletedAt   TEXT
   )`,
     () => {
-      // Sütunlar əvvəlki bazada yoxdursa məcburu yaradır (Xəta versə görməzdən gələcək)
       db.run("ALTER TABLE archivedUsers ADD COLUMN pass TEXT", () => {});
       db.run("ALTER TABLE archivedUsers ADD COLUMN name TEXT", () => {});
       db.run("ALTER TABLE archivedUsers ADD COLUMN slug TEXT", () => {});
@@ -110,7 +125,6 @@ db.serialize(() => {
     },
   );
 
-  // Default superadmin yaradılması
   db.get("SELECT * FROM login WHERE role='superadmin'", (err, row) => {
     if (!row) {
       db.run(
@@ -192,48 +206,249 @@ app.get("/api/user/me", auth, (req, res) => {
       } catch {
         row.skills = ["", "", ""];
       }
-      res.json(row);
+
+      db.get(
+        "SELECT status, rejectReason FROM profileUpdates WHERE userCode=? ORDER BY createdAt DESC LIMIT 1",
+        [req.user.userCode],
+        (err2, updateRow) => {
+          if (updateRow) {
+            row.profileStatus = updateRow.status;
+            row.rejectReason = updateRow.rejectReason;
+          } else {
+            row.profileStatus = "approved";
+            row.rejectReason = null;
+          }
+          res.json(row);
+        },
+      );
     },
   );
 });
 
+// =========================================================================
+// YENİLƏNMİŞ HİSSƏ: PROFIL YENİLƏMƏ VƏ OLD/NEW FƏRQİNİN HESABLANMASI
+// =========================================================================
 app.put("/api/user/me", auth, upload.single("image"), (req, res) => {
   const { email, about, profession, themeColor } = req.body;
   let { skills } = req.body;
-  const skillsString = skills
-    ? typeof skills === "string"
-      ? skills
-      : JSON.stringify(skills)
-    : '["","",""]';
 
+  let imagePath = null;
   if (req.file) {
-    const imagePath = `/uploads/${req.file.filename}`;
-    db.run(
-      `UPDATE personalInfo SET email=?, about=?, profession=?, skills=?, themeColor=?, image=? WHERE userCode=?`,
-      [
-        email,
-        about,
-        profession,
-        skillsString,
-        themeColor,
-        imagePath,
-        req.user.userCode,
-      ],
-      (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ ok: true, image: req.file.filename });
-      },
-    );
-  } else {
-    db.run(
-      `UPDATE personalInfo SET email=?, about=?, profession=?, skills=?, themeColor=? WHERE userCode=?`,
-      [email, about, profession, skillsString, themeColor, req.user.userCode],
-      (err) => {
-        if (err) return res.status(500).json({ error: err.message });
-        res.json({ ok: true });
-      },
-    );
+    imagePath = `/uploads/${req.file.filename}`;
   }
+
+  db.get(
+    "SELECT * FROM personalInfo WHERE userCode = ?",
+    [req.user.userCode],
+    (err, oldData) => {
+      if (err) return res.status(500).json({ error: err.message });
+      if (!oldData)
+        return res.status(404).json({ error: "İstifadəçi tapılmadı." });
+
+      let changesObj = {};
+
+      // Undefined, null fərqlərinin qarşısını almaq üçün təhlükəsiz yoxlama
+      const safeStr = (val) =>
+        val === null || val === undefined ? "" : String(val).trim();
+
+      if (email !== undefined && safeStr(email) !== safeStr(oldData.email)) {
+        changesObj.email = { old: safeStr(oldData.email), new: safeStr(email) };
+      }
+
+      if (about !== undefined && safeStr(about) !== safeStr(oldData.about)) {
+        changesObj.about = { old: safeStr(oldData.about), new: safeStr(about) };
+      }
+
+      if (
+        profession !== undefined &&
+        safeStr(profession) !== safeStr(oldData.profession)
+      ) {
+        changesObj.profession = {
+          old: safeStr(oldData.profession),
+          new: safeStr(profession),
+        };
+      }
+
+      if (
+        themeColor !== undefined &&
+        safeStr(themeColor) !== safeStr(oldData.themeColor)
+      ) {
+        changesObj.themeColor = {
+          old: safeStr(oldData.themeColor),
+          new: safeStr(themeColor),
+        };
+      }
+
+      if (imagePath !== null) {
+        changesObj.image = { old: safeStr(oldData.image), new: imagePath };
+      }
+
+      if (skills !== undefined) {
+        let oldSkills = ["", "", ""];
+        try {
+          oldSkills = oldData.skills
+            ? JSON.parse(oldData.skills)
+            : ["", "", ""];
+        } catch (e) {}
+
+        const newSkillsArray =
+          typeof skills === "string"
+            ? skills.startsWith("[")
+              ? JSON.parse(skills)
+              : skills.split(",").map((s) => s.trim())
+            : Array.isArray(skills)
+              ? skills
+              : ["", "", ""];
+
+        if (JSON.stringify(newSkillsArray) !== JSON.stringify(oldSkills)) {
+          changesObj.skills = { old: oldSkills, new: newSkillsArray };
+        }
+      }
+
+      if (Object.keys(changesObj).length === 0) {
+        return res
+          .status(200)
+          .json({ message: "Heç bir dəyişiklik edilmədi." });
+      }
+
+      const changesJsonString = JSON.stringify(changesObj);
+
+      db.run(
+        "DELETE FROM profileUpdates WHERE userCode = ? AND status = 'pending'",
+        [req.user.userCode],
+        (err2) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+
+          db.run(
+            `INSERT INTO profileUpdates (userCode, changes, status) VALUES (?, ?, 'pending')`,
+            [req.user.userCode, changesJsonString],
+            (err3) => {
+              if (err3) return res.status(500).json({ error: err3.message });
+              res.json({
+                ok: true,
+                message: "Dəyişikliklər admin təsdiqinə göndərildi",
+                status: "pending",
+              });
+            },
+          );
+        },
+      );
+    },
+  );
+});
+
+// =========================================================================
+// YENİLƏNMİŞ HİSSƏ: ADMIN TƏSDİQLƏRİNİ ÇƏKMƏK VƏ `date` ALIASININ VERİLMƏSİ
+// =========================================================================
+app.get("/api/admin/profile-updates", auth, superadminOnly, (req, res) => {
+  db.all(
+    `SELECT pu.id, pu.userCode, pu.changes, pu.status, pu.rejectReason, pu.createdAt AS date, p.name AS fullName 
+     FROM profileUpdates pu 
+     LEFT JOIN personalInfo p ON pu.userCode = p.userCode 
+     WHERE pu.status = 'pending' ORDER BY pu.createdAt ASC`,
+    (err, rows) => {
+      if (err) return res.status(500).json({ error: err.message });
+
+      const formatted = (rows || []).map((row) => {
+        try {
+          row.changes =
+            typeof row.changes === "string"
+              ? JSON.parse(row.changes)
+              : row.changes;
+        } catch (e) {
+          row.changes = {};
+        }
+        return row;
+      });
+      res.json(formatted);
+    },
+  );
+});
+
+// =========================================================================
+// YENİLƏNMİŞ HİSSƏ: POST METODUNUN ROUTER YOLU DÜZƏLDİLDİ
+// =========================================================================
+app.post("/api/admin/profile-updates/:id", auth, superadminOnly, (req, res) => {
+  const { id } = req.params;
+  const { action, reason, rejectReason } = req.body; // Frontend action parametrini BODY-də göndərir.
+
+  const finalReason = rejectReason || reason || null;
+
+  db.get("SELECT * FROM profileUpdates WHERE id=?", [id], (err, row) => {
+    if (err) return res.status(500).json({ error: err.message });
+    if (!row) return res.status(404).json({ error: "Sorğu tapılmadı" });
+
+    if (action === "reject") {
+      db.run(
+        "UPDATE profileUpdates SET status='rejected', rejectReason=? WHERE id=?",
+        [finalReason, id],
+        (err2) => {
+          if (err2) return res.status(500).json({ error: err2.message });
+          return res.json({
+            ok: true,
+            message: "Sorğu rədd edildi və səbəb yazıldı.",
+          });
+        },
+      );
+    } else if (action === "approve") {
+      let changes = {};
+      try {
+        changes =
+          typeof row.changes === "string"
+            ? JSON.parse(row.changes)
+            : row.changes;
+      } catch (e) {
+        return res.status(400).json({ error: "Məlumat formatı səhvdir" });
+      }
+
+      let updateQueries = [];
+      let params = [];
+
+      for (const [key, value] of Object.entries(changes)) {
+        if (
+          ["email", "about", "profession", "themeColor", "image"].includes(key)
+        ) {
+          updateQueries.push(`${key}=?`);
+          params.push(value.new);
+        } else if (key === "skills") {
+          updateQueries.push(`${key}=?`);
+          params.push(JSON.stringify(value.new));
+        }
+      }
+
+      if (updateQueries.length === 0) {
+        db.run(
+          "UPDATE profileUpdates SET status='approved' WHERE id=?",
+          [id],
+          () => {
+            return res.json({ ok: true, message: "Dəyişiklik təsdiqləndi." });
+          },
+        );
+        return;
+      }
+
+      const query = `UPDATE personalInfo SET ${updateQueries.join(", ")} WHERE userCode=?`;
+      params.push(row.userCode);
+
+      db.run(query, params, (err3) => {
+        if (err3) return res.status(500).json({ error: err3.message });
+
+        db.run(
+          "UPDATE profileUpdates SET status='approved' WHERE id=?",
+          [id],
+          () => {
+            res.json({
+              ok: true,
+              message:
+                "Dəyişikliklər təsdiqləndi və sayta (deploy) tətbiq edildi.",
+            });
+          },
+        );
+      });
+    } else {
+      res.status(400).json({ error: "Yanlış əmr" });
+    }
+  });
 });
 
 // ───── USER: SOCIAL LINKS ─────
@@ -390,7 +605,7 @@ app.post(
 app.get("/api/admin/users", auth, superadminOnly, (req, res) => {
   db.all(
     `SELECT l.userCode, l.pass, l.blocked, p.name, p.email, p.slug, p.about, p.image, p.profession, p.skills, p.themeColor, p.createdAt
-     FROM login l LEFT JOIN personalInfo p ON l.userCode = p.userCode WHERE l.role='user' ORDER BY p.createdAt DESC`,
+      FROM login l LEFT JOIN personalInfo p ON l.userCode = p.userCode WHERE l.role='user' ORDER BY p.createdAt DESC`,
     (err, rows) => {
       if (err) return res.status(500).json({ error: err.message });
       const formatted = (rows || []).map((r) => {
@@ -521,8 +736,6 @@ app.delete("/api/admin/social/:id", auth, superadminOnly, (req, res) => {
 // ============================================
 // ARXİV SİSTEMİ: İSTİFADƏÇİ SİLİNMƏSİ VƏ BƏRPASI
 // ============================================
-
-// 1. İstifadəçini Arxivə Göndərmək
 app.delete("/api/admin/users/:code", auth, superadminOnly, (req, res) => {
   const userCode = req.params.code;
 
@@ -545,10 +758,7 @@ app.delete("/api/admin/users/:code", auth, superadminOnly, (req, res) => {
           deletedAt,
         ],
         (err2) => {
-          if (err2) {
-            console.error("Arxiv yazılma xətası:", err2.message);
-            return res.status(500).json({ error: err2.message });
-          }
+          if (err2) return res.status(500).json({ error: err2.message });
 
           db.run("DELETE FROM login WHERE userCode=?", [userCode], (err3) => {
             if (err3) return res.status(500).json({ error: err3.message });
@@ -560,7 +770,6 @@ app.delete("/api/admin/users/:code", auth, superadminOnly, (req, res) => {
   );
 });
 
-// 2. Arxivlənmiş İstifadəçiləri Gətirmək
 app.get("/api/admin/archives/users", auth, superadminOnly, (req, res) => {
   db.all("SELECT * FROM archivedUsers ORDER BY deletedAt DESC", (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -568,7 +777,6 @@ app.get("/api/admin/archives/users", auth, superadminOnly, (req, res) => {
   });
 });
 
-// 3. Arxivdən İstifadəçini Bərpa Etmək
 app.post(
   "/api/admin/archives/users/restore/:id",
   auth,
@@ -621,7 +829,6 @@ app.post(
   },
 );
 
-// 4. Arxivdən İstifadəçini Tamamilə Silmək
 app.delete(
   "/api/admin/archives/users/:id",
   auth,
